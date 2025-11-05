@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - AI旅行规划师</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="logo">AI旅行规划师</div>
+        <h2>用户登录</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">用户名</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" class="btn primary">登录</button>
+            <p>还没有账号？<a href="register.html">立即注册</a></p>
+        </form>
+        <div id="message" class="message"></div>
+    </div>
+
+    <script src="../static/js/script.js"></script>
+    <script>
+        // 登录表单处理
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const messageEl = document.getElementById('message');
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    messageEl.textContent = '登录成功，正在跳转...';
+                    messageEl.className = 'message success';
+                    setTimeout(() => {
+                        window.location.href = 'planner.html';
+                    }, 500);
+                } else {
+                    messageEl.textContent = data.error;
+                    messageEl.className = 'message error';
+                }
+            } catch (error) {
+                messageEl.textContent = '登录失败，请重试';
+                messageEl.className = 'message error';
+            }
+        });
+    </script>
+</body>
+</html>

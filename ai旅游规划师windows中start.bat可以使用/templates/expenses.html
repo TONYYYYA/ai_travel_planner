@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅行费用管理</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <!-- 页面头部：包含logo和导航菜单 -->
+    <header>
+        <!-- 网站标志/名称 -->
+        <div class="logo">AI旅行规划师</div>
+        <!-- 导航栏 -->
+        <nav>
+            <ul>
+                <!-- 导航链接，当前页面（行程规划）添加active类高亮显示 -->
+                <li><a href="planner.html" >行程规划</a></li>
+                <li><a href="expenses.html" class="active">费用管理</a></li>
+                <li><a href="sync.html">云端同步</a></li>
+                <li><a href="guide.html">导航</a></li>
+                <!-- 退出登录按钮 -->
+                <li><button id="logoutBtn" class="btn logout">退出登录</button></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- 主内容区 -->
+    <main>
+        <section>
+            <h2>费用管理</h2>
+            <div class="form-row" style="align-items:flex-end; gap: 12px;">
+                <div class="form-group">
+                    <label for="itinerary-select">选择行程</label>
+                    <select id="itinerary-select">
+                        <option value="">请选择行程</option>
+                    </select>
+                </div>
+                <button id="refreshItineraries" class="btn secondary">刷新行程</button>
+            </div>
+
+            <!-- 添加新开销表单 -->
+            <h3>添加新开销</h3>
+            <form id="expense-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="expense-date">日期</label>
+                        <input type="date" id="expense-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense-category">类别</label>
+                        <select id="expense-category" required>
+                            <option value="">请选择类别</option>
+                            <option value="交通">交通</option>
+                            <option value="住宿">住宿</option>
+                            <option value="餐饮">餐饮</option>
+                            <option value="门票">门票</option>
+                            <option value="购物">购物</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="expense-amount">金额 (元)</label>
+                        <input type="number" id="expense-amount" min="0" step="0.01" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="expense-description">描述</label>
+                    <textarea id="expense-description" rows="2" placeholder="添加开销说明..."></textarea>
+                </div>
+
+                <button type="submit" class="btn primary">添加开销</button>
+            </form>
+        </section>
+
+        <section>
+            <h2>开销记录</h2>
+
+            <!-- 开销表格 -->
+            <table class="expenses-table">
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>类别</th>
+                        <th>金额</th>
+                        <th>描述</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="expenses-list">
+                    <!-- 示例数据 -->
+
+                </tbody>
+            </table>
+
+            <!-- 总费用 -->
+            <div class="total-expense">
+                <strong>总费用: </strong><span id="total-amount">0.00</span> 元
+            </div>
+        </section>
+
+        <!-- 预算分析 -->
+        <section>
+            <h2>预算分析</h2>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="original-budget">原始预算 (元)</label>
+                    <input type="number" id="original-budget" min="0" step="0.01" placeholder="请输入原始预算">
+                </div>
+            </div>
+
+            <!-- 语音输入（仿照 planner.html） -->
+            <div class="voice-controls" style="margin: 10px 0;">
+                <button id="startRecordBudget" class="btn secondary"><i>🎤</i> 开始语音输入</button>
+                <button id="stopRecordBudget" class="btn secondary" disabled><i>⏹️</i> 停止录音</button>
+            </div>
+            <div class="form-group">
+                <label for="budget-note">预算分析备注</label>
+                <textarea id="budget-note" rows="2" placeholder="预算分析"></textarea>
+            </div>
+
+            <div>
+                <button id="analyzeBudgetBtn" class="btn primary">开始分析</button>
+            </div>
+
+            <div id="budget-loading" class="loading" style="display:none;margin-top:10px;">正在分析预算...</div>
+            <div id="budgetAnalysisResult" class="result-area" style="margin-top:10px;"></div>
+        </section>
+    </main>
+    <script src="../static/js/script.js"></script>
+    <script>
+        // 简单的JavaScript功能实现
+        document.addEventListener('DOMContentLoaded', function() {
+            // 设置默认日期为今天
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('expense-date').value = today;
+
+            // 加载行程列表
+            const itinerarySelect = document.getElementById('itinerary-select');
+            async function loadItineraries() {
+                try {
+                    const resp = await fetch('/api/itineraries', {
+                        credentials: 'include'
+                    });
+                    const data = await resp.json();
+                    itinerarySelect.innerHTML = '<option value="">请选择行程</option>' +
+                        (Array.isArray(data) ? data.map(i => `<option value="${i.id}">${i.title}（${(i.created_at || '').slice(0,10)}）</option>`).join('') : '');
+                } catch (e) {
+                    console.error('行程加载失败', e);
+                }
+            }
+            loadItineraries();
+            document.getElementById('refreshItineraries').addEventListener('click', loadItineraries);
+
+            // 根据所选行程加载费用
+            async function loadExpenses(itineraryId) {
+                const expensesList = document.getElementById('expenses-list');
+                const totalElement = document.getElementById('total-amount');
+                expensesList.innerHTML = '';
+                totalElement.textContent = '0.00';
+                if (!itineraryId) return;
+                try {
+                    const resp = await fetch(`/api/expenses/${encodeURIComponent(itineraryId)}`, {
+                        credentials: 'include'
+                    });
+                    const rows = await resp.json();
+                    let total = 0;
+                    (rows || []).forEach(r => {
+                        const tr = document.createElement('tr');
+                        const amount = parseFloat(r.amount) || 0;
+                        total += amount;
+                        tr.innerHTML = `
+                            <td>${(r.created_at || '').slice(0,10)}</td>
+                            <td>${r.category || ''}</td>
+                            <td data-amount="${amount}">${amount.toFixed(2)} 元</td>
+                            <td>${r.description || '-'}</td>
+                            <td>
+                                <button class="btn small secondary">编辑</button>
+                                <button class="btn small danger">删除</button>
+                            </td>
+                        `;
+                        expensesList.appendChild(tr);
+                    });
+                    totalElement.textContent = total.toFixed(2);
+                } catch (e) {
+                    console.error('加载费用失败', e);
+                }
+            }
+            itinerarySelect.addEventListener('change', function(){
+                loadExpenses(this.value);
+            });
+
+            // 表单提交处理
+            const expenseForm = document.getElementById('expense-form');
+            expenseForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const itineraryId = itinerarySelect.value;
+                if (!itineraryId) {
+                    alert('请先选择一个行程');
+                    return;
+                }
+                // 获取表单数据
+                const date = document.getElementById('expense-date').value;
+                const category = document.getElementById('expense-category').value;
+                const amount = document.getElementById('expense-amount').value;
+                const description = document.getElementById('expense-description').value;
+
+                // 简单验证
+                if (!date || !category || !amount) return;
+
+                try {
+                    const resp = await fetch('/api/expenses', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            itinerary_id: itineraryId,
+                            category: category,
+                            amount: parseFloat(amount),
+                            description: description || ''
+                        })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) {
+                        throw new Error((data && data.error) || '保存失败');
+                    }
+                    // 刷新当前行程的费用列表
+                    await loadExpenses(itineraryId);
+                    // 重置表单
+                    expenseForm.reset();
+                    document.getElementById('expense-date').value = today;
+                } catch (err) {
+                    alert('保存开销失败：' + err.message);
+                }
+            });
+
+            // 删除功能 (事件委托)
+            document.getElementById('expenses-list').addEventListener('click', function(e) {
+                if (e.target.classList.contains('danger')) {
+                    const row = e.target.closest('tr');
+                    // 从data属性获取金额数值
+                    const amount = parseFloat(row.querySelector('td:nth-child(3)').dataset.amount);
+
+                    const totalElement = document.getElementById('total-amount');
+                    const currentTotal = parseFloat(totalElement.textContent);
+                    totalElement.textContent = (currentTotal - amount).toFixed(2);
+
+                    // 删除行
+                    row.remove();
+                }
+            });
+
+            // ===== 预算分析：收集表格中开销并调用后端大模型分析 =====
+            function collectExpensesFromTable() {
+                const rows = Array.from(document.querySelectorAll('#expenses-list tr'));
+                return rows.map(row => {
+                    const tds = row.querySelectorAll('td');
+                    return {
+                        date: tds[0]?.textContent || '',
+                        category: tds[1]?.textContent || '',
+                        amount: parseFloat(tds[2]?.dataset.amount || '0') || 0,
+                        description: tds[3]?.textContent || ''
+                    };
+                }).filter(item => item.amount > 0 && item.category);
+            }
+
+            const analyzeBtn = document.getElementById('analyzeBudgetBtn');
+            const loadingEl = document.getElementById('budget-loading');
+            const resultEl = document.getElementById('budgetAnalysisResult');
+            analyzeBtn.addEventListener('click', async function() {
+                const itineraryId = itinerarySelect.value;
+                const originalBudgetStr = document.getElementById('original-budget').value.trim();
+                const originalBudget = parseFloat(originalBudgetStr);
+                const expenses = collectExpensesFromTable();
+                const note = document.getElementById('budget-note').value || '';
+
+                if (isNaN(originalBudget)) {
+                    alert('请输入有效的原始预算');
+                    return;
+                }
+                if (expenses.length === 0) {
+                    alert('请先添加至少一条开销记录');
+                    return;
+                }
+
+                loadingEl.style.display = 'block';
+                resultEl.innerHTML = '';
+
+                try {
+                    const resp = await fetch('/api/analyze-budget', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            itinerary_id: itineraryId || 'unknown',
+                            original_budget: originalBudget,
+                            expenses: expenses.map(e => ({ category: e.category, amount: e.amount })),
+                            note: note
+                        })
+                    });
+                    const data = await resp.json();
+                    loadingEl.style.display = 'none';
+
+                    if (!resp.ok) {
+                        resultEl.innerHTML = `<div class="error">分析失败：${data && data.error ? data.error : '未知错误'}</div>`;
+                        return;
+                    }
+
+                    // 渲染结果（简单展示，可按需美化）
+                    const breakdown = data.category_breakdown || {};
+                    const breakdownHtml = Object.keys(breakdown).length
+                        ? Object.entries(breakdown).map(([k, v]) => `<li>${k}: ${parseFloat(v).toFixed(2)} 元</li>`).join('')
+                        : '<li>无分类数据</li>';
+
+                    resultEl.innerHTML = `
+                        <div>
+                            <h3>预算分析结果</h3>
+                            <div style="margin:6px 0;">原始预算：<strong>${data.original_budget}</strong> 元</div>
+                            <div style="margin:6px 0;">已花费：<strong>${data.total_spent}</strong> 元</div>
+                            <div style="margin:6px 0;">剩余预算：<strong>${data.remaining_budget}</strong> 元</div>
+                            <div style="margin:10px 0;">
+                                <strong>分类支出:</strong>
+                                <ul style="margin:6px 0 0 18px;">${breakdownHtml}</ul>
+                            </div>
+                            <div style="margin-top:10px;">
+                                <strong>AI建议：</strong>
+                                <div>${(data.suggestions || '').toString()}</div>
+                            </div>
+                        </div>
+                    `;
+                } catch (e) {
+                    loadingEl.style.display = 'none';
+                    resultEl.innerHTML = `<div class="error">分析出错：${e.message}</div>`;
+                }
+            });
+
+            // ===== 预算分析语音输入（调用后端speech_to_text1接口） =====
+            const startBudgetBtn = document.getElementById('startRecordBudget');
+            const stopBudgetBtn = document.getElementById('stopRecordBudget');
+            const budgetNote = document.getElementById('budget-note');
+
+            startBudgetBtn.addEventListener('click', async () => {
+                try {
+                    // 调用后端speech_to_text1/start接口开始录音
+                    const resp = await fetch('/api/speech_to_text1/start', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (!resp.ok) {
+                        throw new Error('启动录音失败');
+                    }
+                    
+                    // 更新按钮状态
+                    startBudgetBtn.disabled = true;
+                    stopBudgetBtn.disabled = false;
+                    startBudgetBtn.textContent = '🎤 正在录音...';
+                } catch (err) {
+                    alert('启动录音失败，请检查后端服务');
+                }
+            });
+
+            stopBudgetBtn.addEventListener('click', async () => {
+                try {
+                    // 更新按钮状态
+                    startBudgetBtn.disabled = false;
+                    stopBudgetBtn.disabled = true;
+                    startBudgetBtn.textContent = '🎤 开始语音输入';
+                    
+                    // 调用后端speech_to_text1/stop接口停止录音并获取识别结果
+                    const resp = await fetch('/api/speech_to_text1/stop', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (!resp.ok) {
+                        throw new Error('停止录音失败');
+                    }
+                    
+                    const data = await resp.json();
+                    
+                    // 处理识别结果
+                    function extractText(data) {
+                        let fullText = '';
+                        if (!data || !data.text || !Array.isArray(data.text)) return fullText;
+                        data.text.forEach(textItem => {
+                            if (!textItem.result || !Array.isArray(textItem.result.ws)) return;
+                            textItem.result.ws.forEach(wordObj => {
+                                const word = wordObj.cw && wordObj.cw[0] && wordObj.cw[0].w;
+                                if (word) fullText += word;
+                            });
+                        });
+                        return fullText;
+                    }
+
+                    const resultText = extractText(data);
+                    // 当识别结果为空时显示提示信息
+                    budgetNote.value = resultText || '未识别到请再次输入';
+                } catch (e) {
+                    alert('语音识别失败');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

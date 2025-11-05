@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能行程规划 - AI旅行规划师</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<style>
+    /* 模态框和模态框样式 */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background-color: white;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 300px;
+        max-width: 80%;
+    }
+
+    .modal-footer {
+        margin-top: 15px;
+        text-align: right;
+    }
+
+    #textInput {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+    }
+
+    button {
+        padding: 8px 16px;
+        margin-left: 8px;
+        cursor: pointer;
+    }
+
+    .error {
+        color: red;
+        font-size: 0.9em;
+        margin-top: 5px;
+        display: none;
+    }
+
+    .success {
+        color: green;
+        font-size: 0.9em;
+        margin-top: 5px;
+        display: none;
+    }
+
+    /* 行程展示样式补充 */
+    .itinerary-wrapper {
+        color: #333;
+        line-height: 1.6;
+    }
+
+    .itinerary-header {
+        background-color: #f5f5f5;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .section-title {
+        color: #2c3e50;
+        border-bottom: 2px solid #3498db;
+        padding-bottom: 10px;
+        margin: 20px 0;
+    }
+
+    .daily-cards, .accommodation-list, .attraction-list, .restaurant-list {
+        display: grid;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .day-card, .accommodation-card, .attraction-card, .restaurant-card {
+        background-color: #fff;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    .day-header {
+        font-weight: bold;
+        font-size: 1.1em;
+        margin-bottom: 10px;
+        color: #3498db;
+    }
+
+    .schedule-list {
+        list-style: none;
+        padding: 0;
+    }
+
+    .schedule-list li {
+        margin-bottom: 8px;
+        padding-left: 20px;
+        position: relative;
+    }
+
+    .schedule-list li:before {
+        content: "•";
+        color: #3498db;
+        position: absolute;
+        left: 0;
+    }
+
+    .schedule-time {
+        font-weight: bold;
+        margin-right: 10px;
+    }
+
+    .two-col-section {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .budget-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .budget-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px;
+        background-color: #f9f9f9;
+        border-radius: 4px;
+    }
+
+    .total-budget-item {
+        font-weight: bold;
+        background-color: #e8f4fd;
+        border-top: 2px solid #3498db;
+    }
+
+    .notes-list {
+        padding-left: 20px;
+    }
+
+    .notes-list li {
+        margin-bottom: 8px;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+        display: none;
+    }
+</style>
+<body>
+    <header>
+        <div class="logo">AI旅行规划师</div>
+        <nav>
+            <ul>
+                <li><a href="planner.html" class="active">行程规划</a></li>
+                <li><a href="expenses.html">费用管理</a></li>
+                <li><a href="sync.html">云端同步</a></li>
+                <li><a href="guide.html">导航</a></li>
+                <li><button id="logoutBtn" class="btn logout">退出登录</button></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="planner-section">
+            <h2>智能行程规划</h2>
+
+            <div class="input-area">
+                <div class="form-group">
+                    <label for="tripRequest">请输入你的旅行需求</label>
+                    <textarea id="tripRequest" rows="4" placeholder="例如：我想去日本，5天，预算1万元，喜欢美食和动漫，带孩子"></textarea>
+                </div>
+
+                <div class="voice-controls">
+                    <button id="startRecord" class="btn secondary">
+                        <i>🎤</i> 开始语音输入
+                    </button>
+                    <button id="stopRecord" class="btn secondary" disabled>
+                        <i>⏹️</i> 停止录音
+                    </button>
+                </div>
+
+                <button id="generateBtn" class="btn primary">生成行程</button>
+                <button id="btnSave" class="btn primary">保存</button>
+                <div style="margin-top:10px; display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+                    <div class="form-group" style="margin:0;">
+                        <label for="itinerarySelect">选择已保存的行程</label>
+                        <select id="itinerarySelect">
+                            <option value="">请选择行程</option>
+                        </select>
+                    </div>
+                    <button id="refreshItins" class="btn secondary">刷新行程列表</button>
+                    <button id="loadItinBtn" class="btn secondary">加载行程</button>
+                </div>
+            </div>
+
+            <div class="map-container">
+                <h3>世界地图</h3>
+                <div id="map" style="width:100%; height:400px;"></div>
+                <div style="margin-top:10px;"></div>
+            </div>
+
+            <div class="result-area">
+                <h3 style="color:#000;">行程结果</h3>
+                <div id="loading" class="loading">正在生成行程...</div>
+                <div id="itineraryResult"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <h3>输入文本</h3>
+            <textarea id="textInput" rows="4" placeholder="请输入文本..."></textarea>
+            <div class="error" id="errorMessage">请输入至少3个字符</div>
+            <div class="success" id="successMessage">数据已成功发送到后端</div>
+            <div class="modal-footer">
+                <button id="btnCancel">取消</button>
+                <button id="btnSubmit">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../static/js/script.js"></script>
+    <script>
+        // 初始化百度地图实例
+        var map = null;
+
+        // 百度地图API加载完成后的回调函数
+        window.initBaiduMap = function() {
+            console.log('百度地图API加载完成，开始初始化地图...');
+
+            // 等待DOM加载完成
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initMap);
+            } else {
+                // DOM已加载，延迟一点确保地图容器已渲染
+                setTimeout(initMap, 100);
+            }
+        };
+
+        // 地图初始化函数
+        function initMap() {
+            try {
+                // 检查BMap是否已加载
+                if (typeof BMap === 'undefined' || typeof BMap.Map === 'undefined') {
+                    console.error('百度地图API未完全加载，BMap.Map不可用');
+                    // 等待后重试
+                    setTimeout(function() {
+                        if (typeof BMap !== 'undefined' && typeof BMap.Map !== 'undefined') {
+                            initMap();
+                        } else {
+                            console.error('百度地图API加载失败，请刷新页面重试');
+                        }
+                    }, 500);
+                    return;
+                }
+
+                var mapDiv = document.getElementById('map');
+                if (!mapDiv) {
+                    console.error('地图容器元素不存在！');
+                    return;
+                }
+
+                if (map) {
+                    console.log('地图已经初始化过，跳过重复初始化');
+                    return;
+                }
+
+                console.log('创建地图实例...');
+                map = new BMap.Map('map');
+
+                console.log('设置地图中心点和缩放级别...');
+                var initPoint = new BMap.Point(116.39748, 39.908823); // 北京
+                map.centerAndZoom(initPoint, 10);
+                map.enableScrollWheelZoom(true);
+
+                // 添加地图控件
+                try {
+                    map.addControl(new BMap.NavigationControl());
+                    map.addControl(new BMap.ScaleControl());
+                } catch (e) {
+                    console.warn('添加地图控件时出错（可忽略）：', e);
+                }
+
+                console.log('地图初始化完成', map);
+            } catch (e) {
+                console.error('地图初始化失败：', e);
+                console.error('错误详情：', e.message, e.stack);
+            }
+        }
+
+        // 如果页面加载时API已经加载完成
+        if (typeof BMap !== 'undefined' && typeof BMap.Map !== 'undefined') {
+            console.log('检测到百度地图API已加载，直接初始化');
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(initMap, 100);
+                });
+            } else {
+                setTimeout(initMap, 100);
+            }
+        }
+
+        // 验证用户登录状态
+        checkLoginStatus();
+
+        // 语音录制相关变量定义
+        let mediaRecorder;
+        let audioChunks = [];
+        const startBtn = document.getElementById('startRecord');
+        const stopBtn = document.getElementById('stopRecord');
+        const tripInput = document.getElementById('tripRequest');
+
+        // 已保存行程列表
+        const itinerarySelectEl = document.getElementById('itinerarySelect');
+
+        // 加载已保存的行程列表
+        async function loadSavedItineraries(){
+            try {
+                const resp = await fetch('/api/itineraries', { credentials: 'include' });
+                const data = await resp.json();
+                itinerarySelectEl.innerHTML = '<option value="">请选择行程</option>' +
+                    (Array.isArray(data) ? data.map(i => `<option value="${i.id}">${i.title}（${(i.created_at||'').slice(0,10)}）</option>`).join('') : '');
+            } catch(e){
+                console.error('加载行程列表失败', e);
+            }
+        }
+
+        // 页面初始化时加载行程列表
+        loadSavedItineraries();
+
+        document.getElementById('refreshItins').addEventListener('click', loadSavedItineraries);
+
+        // 开始录音按钮事件
+        startBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                mediaRecorder.start();
+
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                startBtn.textContent = '🎤 正在录音...';
+                // 开始录音时文本框显示正在识别
+                tripInput.value = '正在识别...';
+
+            } catch (error) {
+                alert('无法访问麦克风，请检查权限');
+            }
+        });
+
+        // 停止录音按钮事件
+        stopBtn.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            startBtn.textContent = '🎤 开始语音输入';
+
+            mediaRecorder.addEventListener('dataavailable', event => {
+                audioChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener('stop', async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'recording.wav');
+
+                try {
+                const response = await fetch('/api/speech-to-text', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include'
+                    });
+                    const data = await response.json();
+
+                    function extractText(data) {
+                        let fullText = '';
+                        if (!data || !data.text || !Array.isArray(data.text)) {
+                            console.error("数据结构错误：缺少 text 数组");
+                            return fullText;
+                        }
+
+                        data.text.forEach((textItem) => {
+                            if (!textItem.result || !Array.isArray(textItem.result.ws)) {
+                                return;
+                            }
+
+                            textItem.result.ws.forEach(wordObj => {
+                                const word = wordObj.cw?.[0]?.w;
+                                if (word) fullText += word;
+                            });
+                        });
+                        return fullText;
+                    }
+
+                    const resultText = extractText(data);
+                    tripInput.value = resultText;
+                } catch (error) {
+                    alert('语音识别失败');
+                }
+            });
+        });
+
+        // 生成行程按钮事件
+        document.getElementById('generateBtn').addEventListener('click', async () => {
+            const inputText = tripInput.value.trim();
+            if (!inputText) {
+                alert('请输入旅行需求');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('itineraryResult').innerHTML = '';
+
+            try {
+                const response = await fetch('/api/generate-itinerary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ input: inputText }),
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error('请求失败');
+                }
+
+                const itinerary = await response.json();
+                document.getElementById('loading').style.display = 'none';
+
+                if (itinerary.error) {
+                    document.getElementById('itineraryResult').innerHTML = `<div class="error">${itinerary.error}</div>`;
+                    return;
+                }
+
+                // 解析行程数据
+                let tripData = null;
+                try {
+                    let jsonStr = itinerary.message;
+                    if (typeof jsonStr === 'object') {
+                        tripData = jsonStr;
+                    } else if (typeof jsonStr === 'string') {
+                        jsonStr = jsonStr.trim()
+                            .replace(/^```json\s*\n?/i, '')
+                            .replace(/\n?```\s*$/, '')
+                            .trim();
+
+                        try {
+                            tripData = JSON.parse(jsonStr);
+                        } catch (e1) {
+                            jsonStr = jsonStr.replace(/[ \t]+$/gm, '');
+                            try {
+                                tripData = JSON.parse(jsonStr);
+                            } catch (e2) {
+                                console.error('JSON解析失败', e1, e2);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('解析行程数据时出错：', e);
+                }
+
+                if (tripData) {
+                    displayItinerary(tripData);
+
+                    // 标记景点
+                    const attractions = Array.isArray(tripData.attractions) ? tripData.attractions : [];
+                    const defaultCountry = tripData.country || '';
+                    const defaultCity = tripData.city || '';
+
+                    if (attractions.length > 0) {
+                        await markAttractionsOnMap(attractions, defaultCountry, defaultCity);
+                    }
+                } else {
+                    document.getElementById('itineraryResult').innerHTML = itinerary.message || '无法解析行程数据';
+                }
+
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('itineraryResult').innerHTML = '<div class="error">生成行程失败</div>';
+            }
+        });
+
+        // 加载行程按钮事件 - 完全独立的实现，不依赖其他变量
+        document.getElementById('loadItinBtn').addEventListener('click', async () => {
+            const id = itinerarySelectEl.value;
+            if (!id) {
+                alert('请先选择一个行程');
+                return;
+            }
+
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('itineraryResult').innerHTML = '';
+
+                // 发起请求获取行程数据
+                const resp = await fetch(`/api/itineraries/${encodeURIComponent(id)}`, {
+                    credentials: 'include'
+                });
+
+                const data = await resp.json();
+                document.getElementById('loading').style.display = 'none';
+
+                if (!resp.ok || data.error) {
+                    alert(data.error || '加载失败');
+                    return;
+                }
+
+                // 解析行程数据
+                let parsedData = null;
+                try {
+                    if (typeof data.itinerary_data === 'string') {
+                        parsedData = JSON.parse(data.itinerary_data);
+                    } else {
+                        parsedData = data.itinerary_data;
+                    }
+                } catch(parseErr) {
+                    console.warn('解析已保存行程失败，使用原始文本');
+                    document.getElementById('itineraryResult').textContent = data.itinerary_data || '无法显示行程数据';
+                    return;
+                }
+
+                // 显示行程
+                displayItinerary(parsedData);
+
+                // 在地图上标记景点
+                const attractions = Array.isArray(parsedData.attractions) ? parsedData.attractions : [];
+                const defCountry = parsedData.country || '';
+                const defCity = parsedData.city || '';
+
+                if (attractions.length > 0) {
+                    await markAttractionsOnMap(attractions, defCountry, defCity);
+                }
+
+            } catch (e) {
+                document.getElementById('loading').style.display = 'none';
+                console.error('加载行程异常', e);
+                alert('加载行程异常: ' + e.message);
+            }
+        });
+
+        // 保存行程相关逻辑
+        const btnSave = document.getElementById('btnSave');
+        const modal = document.getElementById('myModal');
+        const btnCancel = document.getElementById('btnCancel');
+        const btnSubmit = document.getElementById('btnSubmit');
+        const textInput = document.getElementById('textInput');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+
+        // 当前显示的行程数据，用于保存功能
+        let currentItineraryData = null;
+
+        btnSave.addEventListener('click', function() {
+            // 检查是否有可保存的行程数据
+            if (!currentItineraryData && document.getElementById('itineraryResult').innerHTML.trim() === '') {
+                alert('请先生成或加载行程后再保存');
+                return;
+            }
+
+            modal.style.display = 'block';
+            textInput.focus();
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+        });
+
+        btnCancel.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+
+        window.addEventListener('click', function(event) {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+
+        btnSubmit.addEventListener('click', async function() {
+            const title = textInput.value.trim();
+            if (title.length < 3) {
+                errorMessage.style.display = 'block';
+                successMessage.style.display = 'none';
+                return;
+            }
+
+            if (!currentItineraryData && document.getElementById('itineraryResult').innerHTML.trim() === '') {
+                errorMessage.textContent = '没有可保存的行程数据';
+                errorMessage.style.display = 'block';
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/itineraries', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        title: title,
+                        input_text: tripInput.value || '',
+                        itinerary_data: currentItineraryData || document.getElementById('itineraryResult').innerHTML
+                    })
+                });
+
+                const data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    throw new Error((data && data.error) || '保存失败');
+                }
+
+                errorMessage.style.display = 'none';
+                successMessage.style.display = 'block';
+
+                // 保存成功后刷新行程列表
+                loadSavedItineraries();
+
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    textInput.value = '';
+                }, 1500);
+
+            } catch (e) {
+                console.error('保存失败:', e);
+                errorMessage.textContent = '保存失败，请重试';
+                errorMessage.style.display = 'block';
+                successMessage.style.display = 'none';
+            }
+        });
+
+        
+
+        // 显示行程详情的函数
+        function displayItinerary(data) {
+            // 保存当前行程数据，用于后续保存操作
+            currentItineraryData = data;
+
+            const resultEl = document.getElementById('itineraryResult');
+
+            // 格式化预算键名
+            const formatBudgetKey = (key) => {
+                const keyMap = {
+                    "flights_international": "国际机票",
+                    "accommodation": "住宿",
+                    "transportation_domestic": "国内交通",
+                    "meals": "餐饮",
+                    "attraction_tickets": "景点门票",
+                    "shopping_and_merchandise": "购物及伴手礼",
+                    "travel_insurance": "旅行保险",
+                    "miscellaneous": "其他杂费"
+                };
+                return keyMap[key] || key.replace(/_/g, " ");
+            };
+
+            resultEl.innerHTML = `
+                <div class="itinerary-wrapper">
+                    <header class="itinerary-header">
+                        <h1>${data.title || "行程计划"}</h1>
+                        <div class="total-budget">
+                            <span class="label">总预算：</span>
+                            <span class="amount">${data.total_budget || "未设置"} 元</span>
+                        </div>
+                    </header>
+
+                    <section class="daily-schedule-section">
+                        <h2 class="section-title">📅 每日行程安排</h2>
+                        <div class="daily-cards">
+                            ${data.daily_schedule && data.daily_schedule.length
+                                ? data.daily_schedule.map(day => `
+                                    <div class="day-card">
+                                        <div class="day-header">第${day.day || "?"}天</div>
+                                        <ul class="schedule-list">
+                                            ${day.schedule && day.schedule.length
+                                                ? day.schedule.map(item => `
+                                                    <li>
+                                                        <span class="schedule-time">${item.time || "待定"}</span>
+                                                        <span class="schedule-activity">${item.activity || "未安排"}</span>
+                                                    </li>
+                                                `).join('')
+                                                : "<li class='no-schedule'>当日暂无安排</li>"}
+                                        </ul>
+                                    </div>
+                                `).join('')
+                                : "<div class='no-daily-data'>暂无每日行程数据</div>"}
+                        </div>
+                    </section>
+
+                    <section class="accommodation-section">
+                        <h2 class="section-title">🏨 住宿推荐</h2>
+                        <div class="accommodation-list">
+                            ${data.accommodation && data.accommodation.length
+                                ? data.accommodation.map(acc => `
+                                    <div class="accommodation-card">
+                                        <div class="acc-city">${acc.city || "未知城市"}</div>
+                                        <div class="acc-hotel">${acc.hotel || "未指定酒店"}</div>
+                                        <div class="acc-reason">推荐理由：${acc.reason || "暂无推荐理由"}</div>
+                                    </div>
+                                `).join('')
+                                : "<div class='no-acc-data'>暂无住宿推荐数据</div>"}
+                        </div>
+                    </section>
+
+                    <section class="transport-section">
+                        <h2 class="section-title">🚃 交通信息</h2>
+                        <div class="transport-table-wrapper">
+                            <table class="transport-table">
+                                <thead>
+                                    <tr>
+                                        <th>路线</th>
+                                        <th>交通方式</th>
+                                        <th>人均费用（元）</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.transportation && data.transportation.length
+                                        ? data.transportation.map(trans => `
+                                            <tr>
+                                                <td>${trans.route || "未指定路线"}</td>
+                                                <td>${trans.method || "未指定方式"}</td>
+                                                <td>${trans.cost_per_person || "未知"}</td>
+                                            </tr>
+                                        `).join('')
+                                        : "<tr><td colspan='3' class='no-trans-data'>暂无交通数据</td></tr>"}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <div class="two-col-section">
+                        <section class="attraction-section">
+                            <h2 class="section-title">🗺️ 景点信息</h2>
+                            <div class="attraction-list">
+                                ${data.attractions && data.attractions.length
+                                    ? data.attractions.map(attr => `
+                                        <div class="attraction-card">
+                                            <div class="attr-name">${attr.name || "未命名景点"}</div>
+                                            <div class="attr-desc">${attr.description || "暂无景点描述"}</div>
+                                            <div class="attr-ticket">
+                                                ${
+                                                    (attr.ticket_price === 0 || attr.ticket_price === '0')
+                                                        ? "门票：<span class='free-tag'>免费</span>"
+                                                        : (() => {
+                                                            const price = (attr.ticket_price === undefined || attr.ticket_price === null || attr.ticket_price === '') ? '未知' : attr.ticket_price;
+                                                            const suffix = (price === '未知') ? '' : ' 元';
+                                                            return `门票：${price}${suffix}`;
+                                                        })()
+                                                }
+                                            </div>
+                                        </div>
+                                    `).join('')
+                                    : "<div class='no-attr-data'>暂无景点数据</div>"}
+                            </div>
+                        </section>
+
+                        <section class="restaurant-section">
+                            <h2 class="section-title">🍽️ 推荐餐厅</h2>
+                            <div class="restaurant-list">
+                                ${data.restaurants && data.restaurants.length
+                                    ? data.restaurants.map(rest => `
+                                        <div class="restaurant-card">
+                                            <div class="rest-name">${rest.name || "未命名餐厅"}</div>
+                                            <div class="rest-cuisine">菜系：${rest.cuisine || "未指定菜系"}</div>
+                                            <div class="rest-cost">人均：${rest.average_cost || "未知"} 元</div>
+                                        </div>
+                                    `).join('')
+                                    : "<div class='no-rest-data'>暂无餐厅数据</div>"}
+                            </div>
+                        </section>
+                    </div>
+
+                    <section class="budget-section">
+                        <h2 class="section-title">💰 预算明细</h2>
+                        <div class="budget-list">
+                            ${data.budget_details
+                                ? Object.entries(data.budget_details)
+                                    .map(([key, value]) => `
+                                        <div class="budget-item">
+                                            <span class="budget-key">${formatBudgetKey(key)}</span>
+                                            <span class="budget-value">${value} 元</span>
+                                        </div>
+                                    `)
+                                    .concat(`
+                                        <div class="budget-item total-budget-item">
+                                            <span class="budget-key">总预算</span>
+                                            <span class="budget-value">${data.total_budget || 0} 元</span>
+                                        </div>
+                                    `)
+                                    .join('')
+                                : "<div class='no-budget-data'>暂无预算明细数据</div>"}
+                        </div>
+                    </section>
+
+                    <section class="notes-section">
+                        <h2 class="section-title">📝 注意事项</h2>
+                        <ul class="notes-list">
+                            ${data.notes && data.notes.length
+                                ? data.notes.map(note => `<li>${note}</li>`).join('')
+                                : "<li class='no-notes'>暂无注意事项</li>"}
+                        </ul>
+                    </section>
+                </div>
+            `;
+        }
+
+        // 在地图上标记景点的函数
+        async function markAttractionsOnMap(attractions, defaultCountry, defaultCity) {
+            console.log('开始标记景点:', attractions);
+
+            if (!map) {
+                console.warn('地图未初始化，等待初始化...');
+                let waitCount = 0;
+                while (!map && waitCount < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    waitCount++;
+                }
+                if (!map) {
+                    console.error('等待地图初始化超时！');
+                    return [];
+                }
+            }
+
+            // 清空现有标记
+            map.clearOverlays();
+
+            const markers = [];
+            const points = [];
+            const markerData = [];
+
+            // 去重处理
+            const seenKeys = {};
+            const uniqueAttractions = [];
+
+            if (Array.isArray(attractions)) {
+                attractions.forEach(attr => {
+                    if (!attr || !attr.name) return;
+
+                    const key = `${attr.name}|${attr.city || ''}|${attr.country || ''}`;
+                    if (!seenKeys[key]) {
+                        seenKeys[key] = true;
+                        uniqueAttractions.push(attr);
+                    }
+                });
+            }
+
+            if (uniqueAttractions.length === 0) {
+                console.warn('没有有效景点可标记');
+                return [];
+            }
+
+            // 处理每个景点
+            for (const attraction of uniqueAttractions) {
+                try {
+                    let lng = null;
+                    let lat = null;
+
+                    // 提取经纬度
+                    if (attraction.address) {
+                        if (typeof attraction.address === 'string') {
+                            const m = attraction.address.match(/(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)/);
+                            if (m) {
+                                lng = parseFloat(m[1]);
+                                lat = parseFloat(m[2]);
+                            }
+                        } else if (typeof attraction.address === 'object') {
+                            if (attraction.address.lng != null && attraction.address.lat != null) {
+                                lng = parseFloat(attraction.address.lng);
+                                lat = parseFloat(attraction.address.lat);
+                            } else if (attraction.address.longitude != null && attraction.address.latitude != null) {
+                                lng = parseFloat(attraction.address.longitude);
+                                lat = parseFloat(attraction.address.latitude);
+                            }
+                        }
+                    }
+
+                    // 尝试从顶层获取经纬度
+                    if ((lng == null || isNaN(lng)) && (lat == null || isNaN(lat))) {
+                        if (attraction.lng != null && attraction.lat != null) {
+                            lng = parseFloat(attraction.lng);
+                            lat = parseFloat(attraction.lat);
+                        } else if (attraction.longitude != null && attraction.latitude != null) {
+                            lng = parseFloat(attraction.longitude);
+                            lat = parseFloat(attraction.latitude);
+                        }
+                    }
+
+                    if (lng == null || lat == null || isNaN(lng) || isNaN(lat)) {
+                        console.warn('缺少有效经纬度，跳过:', attraction.name);
+                        continue;
+                    }
+
+                    const pt = new BMap.Point(lng, lat);
+                    const marker = new BMap.Marker(pt);
+                    map.addOverlay(marker);
+
+                    markers.push(marker);
+                    points.push(pt);
+
+                    markerData.push({
+                        point: pt,
+                        name: attraction.name || '',
+                        address: attraction.address || '',
+                        city: attraction.city || defaultCity,
+                        country: attraction.country || defaultCountry
+                    });
+
+                    // 创建信息窗口
+                    const priceText = attraction.ticket_price !== undefined ? attraction.ticket_price : '未知';
+                    const infoHtml = `
+                        <div style="padding:8px 10px;max-width:280px;line-height:1.5;">
+                            <h3 style="margin:0 0 8px;font-size:16px;color:#333;">${attraction.name || ''}</h3>
+                            ${attraction.city ? `<p style="margin:4px 0;color:#666;font-size:13px;">📍 ${attraction.city}${attraction.country ? ', ' + attraction.country : ''}</p>` : ''}
+                            ${attraction.description ? `<p style="margin:4px 0;color:#555;font-size:13px;">${attraction.description.length > 100 ? attraction.description.substring(0, 100) + '...' : attraction.description}</p>` : ''}
+                            <p style="margin:4px 0;color:#e74c3c;font-size:13px;">💰 门票: ${priceText} 元</p>
+                        </div>
+                    `;
+
+                    const infoWindow = new BMap.InfoWindow(infoHtml, { width: 280, height: 150 });
+                    marker.addEventListener('click', () => map.openInfoWindow(infoWindow, pt));
+
+                } catch (error) {
+                    console.error('处理景点时出错:', error);
+                }
+            }
+
+            // 绘制路线
+            if (points.length > 1) {
+                const polyline = new BMap.Polyline(points, {
+                    strokeColor: '#FF6600',
+                    strokeWeight: 5,
+                    strokeOpacity: 0.8
+                });
+                map.addOverlay(polyline);
+            }
+
+            // 调整地图视野
+            if (markers.length > 0) {
+                map.setViewport(points);
+            }
+
+            return markerData;
+        }
+    </script>
+    <script defer type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=gvMUm7Z13BdS8Zgm3ZTKXE3DWlLBil2z&callback=initBaiduMap"></script>
+</body>
+</html>

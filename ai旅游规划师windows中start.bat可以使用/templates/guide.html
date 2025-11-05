@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地图导航指南 - AI旅行规划师</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+    <!-- 保留页面设计样式，不再加载第三方地图脚本 -->
+</head>
+<body>
+    <!-- 复用原页面头部，保持导航栏风格统一 -->
+    <header>
+        <div class="logo">AI旅行规划师</div>
+        <nav>
+            <ul>
+                <li><a href="planner.html">行程规划</a></li>
+                <li><a href="expenses.html">费用管理</a></li>
+                <li><a href="sync.html">云端同步</a></li>
+                <li><a href="guide.html" class="active">地图导航</a></li> <!-- 当前页面高亮 -->
+                <li><button id="logoutBtn" class="btn logout">退出登录</button></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- 主体内容：延续原页面布局结构，新增导航功能模块 -->
+    <main>
+        <section class="planner-section">
+            <h2>地图导航（百度地图 MCP）</h2>
+
+            <!-- 通过后端 /api/schema/personal-map 生成 MCP URI 并打开导航 -->
+            <div class="input-area">
+                <div class="form-group" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <div style="flex: 1;">
+                        <label for="title">导航标题</label>
+                        <input type="text" id="title" placeholder="例如：今日景点导航" class="form-control" value="我的导航">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="points">目的地列表（每行一个：名称 或 名称,城市,国家）</label>
+                    <textarea id="points" class="form-control" placeholder="故宫博物院, 北京, 中国\n上海迪士尼度假区, 上海, 中国" style="height: 120px;"></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px;">
+                    <button id="buildMapBtn" class="btn primary">生成并打开百度地图</button>
+                    <button id="clearBtn" class="btn secondary">清空</button>
+                </div>
+            </div>
+
+            <div class="result-area" style="margin-top: 20px; display: none;" id="resultArea">
+                <h3>生成结果</h3>
+                <div style="margin-bottom: 8px;">Web 打开链接：<a id="webUrl" href="#" target="_blank">-</a></div>
+                <div>App URI（尝试唤起百度地图App）：<code id="appUri">-</code></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 复用原页面通用JS，保证登录状态管理一致 -->
+    <script src="../static/js/script.js"></script>
+    <script>
+        // 验证登录状态
+        checkLoginStatus();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('logoutBtn').addEventListener('click', () => logout());
+
+            document.getElementById('buildMapBtn').addEventListener('click', async () => {
+                const title = document.getElementById('title').value.trim() || '我的导航';
+                const raw = document.getElementById('points').value.trim();
+                if (!raw) {
+                    alert('请至少输入一个目的地');
+                    return;
+                }
+
+                const points = raw.split(/\n+/).map(line => {
+                    const parts = line.split(',').map(s => s.trim()).filter(Boolean);
+                    if (parts.length === 0) return null;
+                    return { name: parts[0], city: parts[1] || undefined, country: parts[2] || undefined };
+                }).filter(Boolean);
+
+                if (points.length === 0) {
+                    alert('请输入有效的目的地行');
+                    return;
+                }
+
+                try {
+                    const res = await fetch('/api/schema/personal-map', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ title, points })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.error || '生成失败');
+                    }
+
+                    const webUrl = data.web_url;
+                    const appUri = data.uri;
+
+                    // 展示结果
+                    const resArea = document.getElementById('resultArea');
+                    resArea.style.display = 'block';
+                    const webA = document.getElementById('webUrl');
+                    webA.href = webUrl;
+                    webA.textContent = webUrl;
+                    document.getElementById('appUri').textContent = appUri || '-';
+
+                    // 优先尝试唤起百度地图App（URI），失败则打开web
+                    if (appUri) {
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = appUri;
+                        document.body.appendChild(iframe);
+                        setTimeout(() => {
+                            window.open(webUrl, '_blank');
+                            document.body.removeChild(iframe);
+                        }, 800);
+                    } else if (webUrl) {
+                        window.open(webUrl, '_blank');
+                    }
+                } catch (e) {
+                    alert('生成或打开百度地图失败');
+                    console.error(e);
+                }
+            });
+
+            document.getElementById('clearBtn').addEventListener('click', () => {
+                document.getElementById('title').value = '';
+                document.getElementById('points').value = '';
+                document.getElementById('resultArea').style.display = 'none';
+            });
+        });
+    </script>
+</body>
+</html>

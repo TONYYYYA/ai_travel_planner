@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>云端同步 - AI旅行规划师</title>
+    <link rel="stylesheet" href="../static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="logo">AI旅行规划师</div>
+        <nav>
+            <ul>
+                <li><a href="planner.html">行程规划</a></li>
+                <li><a href="expenses.html">费用管理</a></li>
+                <li><a href="sync.html" class="active">云端同步</a></li>
+                <li><a href="guide.html">导航</a></li>
+                <li><button id="logoutBtn" class="btn logout">退出登录</button></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="sync-section">
+            <h2>云端行程同步</h2>
+
+            <div class="sync-controls">
+                <button id="syncNow" class="btn primary">立即同步</button>
+                <div id="syncStatus" class="sync-status">最后同步时间: 从未同步</div>
+            </div>
+
+            <div class="synced-itineraries">
+                <h3>我的云端行程</h3>
+                <div id="itinerariesList"></div>
+            </div>
+
+            <div class="device-management">
+                <h3>已登录设备</h3>
+                <div id="devicesList">
+                    <div class="device-item">
+                        <span class="device-name">当前设备</span>
+                        <span class="device-info">浏览器: ${navigator.userAgent.match(/(Chrome|Firefox|Safari|Edge)/)[1]}</span>
+                        <span class="device-status">在线</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="../static/js/script.js"></script>
+    <script>
+        // 验证登录状态
+        checkLoginStatus();
+
+        // 加载云端行程
+        async function loadCloudItineraries() {
+            try {
+                const response = await fetch('/api/itineraries', {
+                    credentials: 'include'
+                });
+                const itineraries = await response.json();
+
+                const listEl = document.getElementById('itinerariesList');
+                listEl.innerHTML = '';
+
+                if (itineraries.length === 0) {
+                    listEl.innerHTML = '<p>暂无云端行程</p>';
+                    return;
+                }
+
+                itineraries.forEach(itinerary => {
+                    const item = document.createElement('div');
+                    item.className = 'itinerary-item';
+
+                    // 格式化日期
+                    const date = new Date(itinerary.created_at);
+                    const formattedDate = date.toLocaleString();
+
+                    item.innerHTML = `
+                        <div class="itinerary-info">
+                            <h4>${itinerary.title}</h4>
+                            <p>创建时间: ${formattedDate}</p>
+                        </div>
+                        <div class="itinerary-actions">
+                            <button class="btn danger delete-btn" data-id="${itinerary.id}">删除</button>
+                        </div>
+                    `;
+
+                    listEl.appendChild(item);
+                });
+
+                // 添加删除行程事件
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (confirm('确定要删除这个行程吗？')) {
+                            try {
+                                const res = await fetch(`/api/itineraries/${btn.dataset.id}`, {
+                                    method: 'DELETE',
+                                    credentials: 'include'
+                                });
+                                const data = await res.json();
+                                if (!res.ok || !data.success) {
+                                    throw new Error(data.error || '删除失败');
+                                }
+                                loadCloudItineraries(); // 重新加载列表
+                            } catch (error) {
+                                alert('删除失败');
+                            }
+                        }
+                    });
+                });
+
+            } catch (error) {
+                alert('加载云端行程失败');
+            }
+        }
+
+        // 同步功能
+        document.getElementById('syncNow').addEventListener('click', async () => {
+            const syncBtn = document.getElementById('syncNow');
+            const statusEl = document.getElementById('syncStatus');
+
+            syncBtn.disabled = true;
+            syncBtn.textContent = '同步中...';
+            statusEl.textContent = '正在同步数据...';
+
+            try {
+                // 模拟同步过程
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // 更新同步状态
+                const now = new Date().toLocaleString();
+                statusEl.textContent = `最后同步时间: ${now}`;
+
+                // 重新加载行程列表
+                loadCloudItineraries();
+
+                alert('同步成功');
+            } catch (error) {
+                statusEl.textContent = '同步失败，请重试';
+                alert('同步失败');
+            } finally {
+                syncBtn.disabled = false;
+                syncBtn.textContent = '立即同步';
+            }
+        });
+
+        // 页面加载时初始化
+        loadCloudItineraries();
+
+        // 检查本地存储中最后同步时间
+        const lastSync = localStorage.getItem('lastSyncTime');
+        if (lastSync) {
+            document.getElementById('syncStatus').textContent = `最后同步时间: ${lastSync}`;
+        }
+    </script>
+</body>
+</html>
